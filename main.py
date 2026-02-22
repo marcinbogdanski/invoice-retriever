@@ -1,23 +1,26 @@
-import os
 import sys
+from pathlib import Path
 
-from playwright.sync_api import sync_playwright
-
-
+INVOICE_DIR = Path(
+    "/home/marcin/Dropbox/Business/DroneX_3_Trading/Financial/Invoices2/Obsidian"
+)
 def main() -> int:
-    cdp_url = os.getenv("CDP_URL", "http://127.0.0.1:9222")
-    try:
-        with sync_playwright() as p:
-            browser = p.chromium.connect_over_cdp(cdp_url)
-            context = browser.contexts[0] if browser.contexts else browser.new_context()
-            page = context.pages[0] if context.pages else context.new_page()
-            page.goto("https://example.com", wait_until="domcontentloaded")
-            print(f"Connected OK: {page.title()} ({page.url})")
-            browser.close()
-        return 0
-    except Exception as exc:
-        print(f"Connection failed to {cdp_url}: {exc}", file=sys.stderr)
-        return 1
+    assert INVOICE_DIR.is_dir(), f"{INVOICE_DIR} is not a directory"
+
+    matches = []
+    for path in INVOICE_DIR.rglob("*"):
+        if not path.is_file() or path.suffix.lower() != ".pdf":
+            continue
+
+        date_value = path.stem.split(" - ")[0]
+        matches.append((date_value, path))
+
+    matches.sort(reverse=True)
+    for date_value, path in matches:
+        print(f"{date_value} | {path}")
+
+    print(f"Found {len(matches)} dated PDF file(s).")
+    return 0
 
 
 if __name__ == "__main__":
