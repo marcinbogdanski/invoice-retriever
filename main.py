@@ -2,6 +2,10 @@ import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
+# import playwright
+# print(playwright.__version__)
+# exit(0)
+
 INVOICE_DIR = Path("/home/marcin/Dropbox/Business/DroneX_3_Trading/Financial/Invoices2/Obsidian")
 
 def main() -> int:
@@ -41,6 +45,28 @@ def main() -> int:
 
         page.locator("h2:has-text('Billing')").first.wait_for(timeout=5000)
         print("Billing page detected")
+        page.wait_for_timeout(1000)
+
+        invoice_section = page.locator("div.setting").filter(
+            has_text="Invoices and refunds"
+        ).first
+        assert invoice_section.count() > 0, "Could not find the Invoices and refunds section"
+
+        view_action = invoice_section.locator("a.button", has_text="View").first
+        view_action.first.click(timeout=5000)
+
+        invoice_list = page.locator("div.modal-content div.invoice-list").first
+        invoice_list.wait_for(timeout=15000)
+        print(f"Invoice view opened. URL: {page.url}")
+
+        invoice_items = page.locator("div.modal-content div.invoice-item")
+        invoice_count = invoice_items.count()
+        assert invoice_count > 0, "Invoice modal opened but no invoice items found"
+        print(f"Found {invoice_count} online invoice row(s).")
+
+        for i in range(invoice_count):
+            date_text = invoice_items.nth(i).locator("div.text-muted").first.inner_text().strip()
+            print(f"online date: {date_text}")
 
     return 0
 
