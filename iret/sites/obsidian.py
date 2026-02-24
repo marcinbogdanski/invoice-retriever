@@ -77,12 +77,16 @@ def get_invoice(invoice_id: str) -> Path:
             for i, record in enumerate(records)
             if record["date"] == target_date and record["receipt_number"] == target_receipt_number
         )
+        record = records[row_index]
         page.locator("div.modal-content div.invoice-item").nth(row_index).locator(
             "button", has_text="View"
         ).first.click(timeout=TIMEOUT_WAIT_FOR)
         page.locator("button", has_text="Print invoice").first.wait_for(timeout=TIMEOUT_WAIT_FOR)
         output_dir = Path("data/obsidian")
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{invoice_id}.pdf"
+        file_date = record["date"].replace("-", ".")
+        file_amount = f"{record['amount_cents'] / 100:.2f}"
+        file_receipt = record["receipt_number"]
+        output_path = output_dir / f"dynalist - {file_date} - {file_amount} - {file_receipt}.pdf"
         page.pdf(path=str(output_path), print_background=True)
     return output_path.resolve()
