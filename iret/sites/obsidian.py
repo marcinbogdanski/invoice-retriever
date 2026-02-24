@@ -58,7 +58,7 @@ def list_invoices() -> list[dict]:
     return [_to_record(raw) for raw in invoices]
 
 
-def get_invoice(invoice_id: str) -> Path:
+def get_invoice(invoice_id: str, out_dir: Path | None = None) -> Path:
     match = INVOICE_ID_PATTERN.match(invoice_id)
     assert match, f"Invalid invoice id format: {invoice_id}"
     target_date = match.group(1)
@@ -82,11 +82,12 @@ def get_invoice(invoice_id: str) -> Path:
             "button", has_text="View"
         ).first.click(timeout=TIMEOUT_WAIT_FOR)
         page.locator("button", has_text="Print invoice").first.wait_for(timeout=TIMEOUT_WAIT_FOR)
-        output_dir = Path("data/obsidian")
+        output_dir = out_dir if out_dir is not None else Path("data/obsidian")
         output_dir.mkdir(parents=True, exist_ok=True)
         file_date = record["date"].replace("-", ".")
         file_amount = f"{record['amount_cents'] / 100:.2f}"
         file_receipt = record["receipt_number"]
         output_path = output_dir / f"dynalist - {file_date} - {file_amount} - {file_receipt}.pdf"
+        assert not output_path.exists(), f"File already exists: {output_path}"
         page.pdf(path=str(output_path), print_background=True)
     return output_path.resolve()

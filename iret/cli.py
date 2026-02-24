@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import tempfile
 import textwrap
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -28,11 +29,11 @@ def _local_list(site: str) -> list[dict]:
     raise AssertionError(f"Unsupported site: {site}")
 
 
-def _local_get(site: str, invoice_id: str) -> Path:
+def _local_get(site: str, invoice_id: str, out_dir: Path | None = None) -> Path:
     if site == "obsidian":
         from iret.sites import obsidian
 
-        return obsidian.get_invoice(invoice_id)
+        return obsidian.get_invoice(invoice_id, out_dir=out_dir)
     raise AssertionError(f"Unsupported site: {site}")
 
 
@@ -41,9 +42,10 @@ def _proxy_list(base_url: str, site: str) -> list[dict]:
         return json.loads(response.read().decode("utf-8"))
 
 
-def _proxy_get(base_url: str, site: str, invoice_id: str) -> bytes:
+def _proxy_get(base_url: str, site: str, invoice_id: str) -> tuple[bytes, str]:
     with urlopen(f"{base_url.rstrip('/')}/v1/{site}/get/{quote(invoice_id, safe='')}") as response:
-        return response.read()
+        filename = response.headers.get("X-Iret-Filename", f"{invoice_id}.pdf")
+        return response.read(), filename
 
 
 def _start_proxy() -> None:
@@ -72,10 +74,12 @@ def _start_proxy() -> None:
 
             if path.startswith("/v1/obsidian/get/"):
                 invoice_id = unquote(path[len("/v1/obsidian/get/") :])
-                invoice_path = _local_get("obsidian", invoice_id)
-                body = invoice_path.read_bytes()
+                with tempfile.TemporaryDirectory(prefix="iret-proxy-") as tmp:
+                    invoice_path = _local_get("obsidian", invoice_id, out_dir=Path(tmp))
+                    body = invoice_path.read_bytes()
                 self.send_response(200)
                 self.send_header("Content-Type", "application/pdf")
+                self.send_header("X-Iret-Filename", invoice_path.name)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -90,7 +94,12 @@ def _start_proxy() -> None:
         f"To access proxy run: {PROXY_ENV_VAR}=http://<trusted-host>:{PROXY_PORT} iret obsidian list",
         flush=True,
     )
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.server_close()
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -121,8 +130,15 @@ def _build_parser() -> argparse.ArgumentParser:
         dest="obsidian_action", required=True, metavar="action"
     )
     obsidian_commands.add_parser("list", help="List invoices")
-    get_parser = obsidian_commands.add_parser("get", help="Download invoice PDF")
+    get_parser = obsidian_commands.add_parser(
+        "get", help="Download invoice PDF (fails if destination file exists)"
+    )
     get_parser.add_argument("invoice_id", help="Invoice ID, e.g. obsidian_2026-02-07_1487-9029")
+    get_parser.add_argument(
+        "--out-dir",
+        default=None,
+        help="Output directory. Default: data/obsidian",
+    )
 
     commands.add_parser(
         "proxy",
@@ -158,16 +174,17 @@ def main() -> int:
         return 0
 
     invoice_id = args.invoice_id
+    out_dir = Path(args.out_dir).expanduser() if args.out_dir else Path(f"data/{site}")
     if proxy_url:
-        pdf_bytes = _proxy_get(proxy_url, site, invoice_id)
-        output_dir = Path(f"data/{site}")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{invoice_id}.pdf"
+        pdf_bytes, filename = _proxy_get(proxy_url, site, invoice_id)
+        out_dir.mkdir(parents=True, exist_ok=True)
+        output_path = out_dir / filename
+        assert not output_path.exists(), f"File already exists: {output_path}"
         output_path.write_bytes(pdf_bytes)
         print(output_path.resolve())
         return 0
 
-    path = _local_get(site, invoice_id)
+    path = _local_get(site, invoice_id, out_dir=out_dir)
     print(path)
     return 0
 
