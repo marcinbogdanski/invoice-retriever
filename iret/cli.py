@@ -84,7 +84,13 @@ def _start_proxy() -> None:
             self.send_response(404)
             self.end_headers()
 
-    HTTPServer((PROXY_HOST, PROXY_PORT), Handler).serve_forever()
+    server = HTTPServer((PROXY_HOST, PROXY_PORT), Handler)
+    print(f"Proxy is running on http://{PROXY_HOST}:{PROXY_PORT}", flush=True)
+    print(
+        f"To access proxy run: {PROXY_ENV_VAR}=http://<trusted-host>:{PROXY_PORT} iret obsidian list",
+        flush=True,
+    )
+    server.serve_forever()
 
 
 def _build_parser() -> argparse.ArgumentParser:
