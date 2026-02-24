@@ -8,7 +8,8 @@ from playwright.sync_api import sync_playwright
 BILLING_URL = "https://obsidian.md/account/billing"
 INVOICE_LIST_URL = "https://api.obsidian.md/subscription/invoice/list"
 INVOICE_ID_PATTERN = re.compile(r"^obsidian_(\d{4}-\d{2}-\d{2})_(.+)$")
-
+TIMEOUT_LOGIN = 3000
+TIMEOUT_WAIT_FOR = 15000
 
 def _to_record(raw: dict) -> dict:
     date = datetime.fromtimestamp(raw["created"] / 1000, tz=timezone.utc).date().isoformat()
@@ -25,11 +26,13 @@ def _to_record(raw: dict) -> dict:
 
 def _open_invoice_list(page, invoices: list) -> None:
     page.goto(BILLING_URL, wait_until="domcontentloaded")
-    page.locator("h1:has-text('Sign in to your account'), h2:has-text('Billing')").first.wait_for(timeout=10000)
+    page.locator("h1:has-text('Sign in to your account'), h2:has-text('Billing')").first.wait_for(
+        timeout=TIMEOUT_WAIT_FOR
+    )
     if page.get_by_role("heading", name="Sign in to your account").count() > 0:
-        page.wait_for_timeout(1500)
+        page.wait_for_timeout(TIMEOUT_LOGIN)
         page.get_by_role("button", name="Sign in").first.click()
-    page.locator("h2:has-text('Billing')").first.wait_for(timeout=10000)
+    page.locator("h2:has-text('Billing')").first.wait_for(timeout=TIMEOUT_WAIT_FOR)
 
     def on_response(response):
         if response.url == INVOICE_LIST_URL:
@@ -39,8 +42,8 @@ def _open_invoice_list(page, invoices: list) -> None:
     page.on("response", on_response)
     page.locator("div.setting").filter(has_text="Invoices and refunds").first.locator(
         "a.button", has_text="View"
-    ).first.click(timeout=5000)
-    page.locator("div.modal-content div.invoice-list").first.wait_for(timeout=15000)
+    ).first.click(timeout=TIMEOUT_WAIT_FOR)
+    page.locator("div.modal-content div.invoice-list").first.wait_for(timeout=TIMEOUT_WAIT_FOR)
     assert invoices, "Invoice list API response was not captured"
 
 
@@ -76,8 +79,8 @@ def get_invoice(invoice_id: str) -> Path:
         )
         page.locator("div.modal-content div.invoice-item").nth(row_index).locator(
             "button", has_text="View"
-        ).first.click(timeout=5000)
-        page.locator("button", has_text="Print invoice").first.wait_for(timeout=10000)
+        ).first.click(timeout=TIMEOUT_WAIT_FOR)
+        page.locator("button", has_text="Print invoice").first.wait_for(timeout=TIMEOUT_WAIT_FOR)
         output_dir = Path("data/obsidian")
         output_dir.mkdir(parents=True, exist_ok=True)
         output_path = output_dir / f"{invoice_id}.pdf"
