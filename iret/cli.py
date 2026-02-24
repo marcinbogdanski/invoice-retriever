@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import textwrap
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import quote, unquote, urlparse
@@ -86,38 +87,81 @@ def _start_proxy() -> None:
     HTTPServer((PROXY_HOST, PROXY_PORT), Handler).serve_forever()
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(prog="iret")
-    parser.add_argument("--start-proxy", action="store_true")
-    parser.add_argument("site", nargs="?")
-    parser.add_argument("action", nargs="?")
-    parser.add_argument("invoice_id", nargs="?")
-    args = parser.parse_args()
+def _build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="iret",
+        description="Retrieve invoices from supported sites.",
+        epilog=textwrap.dedent(
+            f"""\
+            Examples:
+              iret obsidian list
+              iret obsidian get obsidian_2026-02-07_1487-9029
+              iret proxy
 
-    if args.start_proxy:
+            Delegation:
+              Set {PROXY_ENV_VAR}=http://host:{PROXY_PORT} to delegate obsidian list/get via proxy.
+            """
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    commands = parser.add_subparsers(dest="command", required=True, metavar="command")
+
+    obsidian_parser = commands.add_parser(
+        "obsidian",
+        help="Obsidian invoice commands",
+        description="Commands for Obsidian invoices.",
+    )
+    obsidian_commands = obsidian_parser.add_subparsers(
+        dest="obsidian_action", required=True, metavar="action"
+    )
+    obsidian_commands.add_parser("list", help="List invoices")
+    get_parser = obsidian_commands.add_parser("get", help="Download invoice PDF")
+    get_parser.add_argument("invoice_id", help="Invoice ID, e.g. obsidian_2026-02-07_1487-9029")
+
+    commands.add_parser(
+        "proxy",
+        help=f"Run proxy server on {PROXY_HOST}:{PROXY_PORT}",
+        description=f"Run proxy server on {PROXY_HOST}:{PROXY_PORT}.",
+    )
+    return parser
+
+
+def main() -> int:
+    legacy_parser = argparse.ArgumentParser(add_help=False)
+    legacy_parser.add_argument("--start-proxy", action="store_true", help=argparse.SUPPRESS)
+    legacy_args, remaining = legacy_parser.parse_known_args()
+
+    if legacy_args.start_proxy:
         _start_proxy()
         return 0
 
-    assert args.site, "site is required unless --start-proxy is used"
-    assert args.action in {"list", "get"}, "action must be list or get"
+    parser = _build_parser()
+    args = parser.parse_args(remaining)
+
+    if args.command == "proxy":
+        _start_proxy()
+        return 0
+
+    site = "obsidian"
+    action = args.obsidian_action
     proxy_url = os.getenv(PROXY_ENV_VAR)
 
-    if args.action == "list":
-        records = _proxy_list(proxy_url, args.site) if proxy_url else _local_list(args.site)
+    if action == "list":
+        records = _proxy_list(proxy_url, site) if proxy_url else _local_list(site)
         _print_records(records)
         return 0
 
-    assert args.invoice_id, "invoice_id is required for get"
+    invoice_id = args.invoice_id
     if proxy_url:
-        pdf_bytes = _proxy_get(proxy_url, args.site, args.invoice_id)
-        output_dir = Path(f"data/{args.site}")
+        pdf_bytes = _proxy_get(proxy_url, site, invoice_id)
+        output_dir = Path(f"data/{site}")
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"{args.invoice_id}.pdf"
+        output_path = output_dir / f"{invoice_id}.pdf"
         output_path.write_bytes(pdf_bytes)
         print(output_path.resolve())
         return 0
 
-    path = _local_get(args.site, args.invoice_id)
+    path = _local_get(site, invoice_id)
     print(path)
     return 0
 
