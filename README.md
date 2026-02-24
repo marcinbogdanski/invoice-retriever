@@ -16,8 +16,9 @@ Start Chrome with remote debugging in one terminal:
 ./start-chrome-browser.sh
 ```
 
-Run the Playwright connection test in another terminal:
+Run invoice commands in another terminal:
 
 ```bash
-uv run python main.py
+uv run iret obsidian list
+uv run iret obsidian get obsidian_2026-02-07_1487-9029
 ```
