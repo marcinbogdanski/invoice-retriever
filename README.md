@@ -2,6 +2,12 @@
 
 Use Playwright to retrieve invoices from selected suppliers.
 
+## Project
+
+- **Repo:** `https://github.com/marcinbogdanski/invoice-retriever`
+- **README:** `https://raw.githubusercontent.com/marcinbogdanski/invoice-retriever/refs/heads/main/README.md`
+- **Skill:** `https://raw.githubusercontent.com/marcinbogdanski/invoice-retriever/refs/heads/main/skills/iret/SKILL.md`
+
 ## Quick start (fresh clone)
 
 ```bash
