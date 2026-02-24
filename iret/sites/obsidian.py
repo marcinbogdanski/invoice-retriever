@@ -11,6 +11,18 @@ INVOICE_ID_PATTERN = re.compile(r"^obsidian_(\d{4}-\d{2}-\d{2})_(.+)$")
 TIMEOUT_LOGIN = 3000
 TIMEOUT_WAIT_FOR = 15000
 
+
+def _next_available_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    counter = 1
+    while True:
+        candidate = path.with_name(f"{path.stem} ({counter}){path.suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
 def _to_record(raw: dict) -> dict:
     date = datetime.fromtimestamp(raw["created"] / 1000, tz=timezone.utc).date().isoformat()
     receipt_number = raw.get("receipt_number") or raw.get("id", "")
@@ -86,13 +98,14 @@ def get_invoice(invoice_id: str, out_dir: Path | None = None) -> Path:
                 "button", has_text="View"
             ).first.click(timeout=TIMEOUT_WAIT_FOR)
             page.locator("button", has_text="Print invoice").first.wait_for(timeout=TIMEOUT_WAIT_FOR)
-            output_dir = out_dir if out_dir is not None else Path("data/obsidian")
+            output_dir = out_dir if out_dir is not None else Path.home() / "Downloads"
             output_dir.mkdir(parents=True, exist_ok=True)
             file_date = record["date"].replace("-", ".")
             file_amount = f"{record['amount_cents'] / 100:.2f}"
             file_receipt = record["receipt_number"]
-            output_path = output_dir / f"dynalist - {file_date} - {file_amount} - {file_receipt}.pdf"
-            assert not output_path.exists(), f"File already exists: {output_path}"
+            output_path = _next_available_path(
+                output_dir / f"dynalist - {file_date} - {file_amount} - {file_receipt}.pdf"
+            )
             page.pdf(path=str(output_path), print_background=True)
         finally:
             page.close()

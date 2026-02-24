@@ -11,6 +11,18 @@ from urllib.request import urlopen
 PROXY_ENV_VAR = "IRET_PROXY_URL"
 PROXY_HOST = "0.0.0.0"
 PROXY_PORT = 8765
+DEFAULT_OUT_DIR = Path.home() / "Downloads"
+
+
+def _next_available_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+    counter = 1
+    while True:
+        candidate = path.with_name(f"{path.stem} ({counter}){path.suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1
 
 
 def _print_records(records: list[dict]) -> None:
@@ -131,13 +143,13 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     obsidian_commands.add_parser("list", help="List invoices")
     get_parser = obsidian_commands.add_parser(
-        "get", help="Download invoice PDF (fails if destination file exists)"
+        "get", help="Download invoice PDF (auto-suffixes filename on collision)"
     )
     get_parser.add_argument("invoice_id", help="Invoice ID, e.g. obsidian_2026-02-07_1487-9029")
     get_parser.add_argument(
         "--out-dir",
         default=None,
-        help="Output directory. Default: data/obsidian",
+        help="Output directory. Default: ~/Downloads",
     )
 
     commands.add_parser(
@@ -160,33 +172,36 @@ def main() -> int:
     parser = _build_parser()
     args = parser.parse_args(remaining)
 
-    if args.command == "proxy":
-        _start_proxy()
+    try:
+        if args.command == "proxy":
+            _start_proxy()
+            return 0
+
+        site = "obsidian"
+        action = args.obsidian_action
+        proxy_url = os.getenv(PROXY_ENV_VAR)
+
+        if action == "list":
+            records = _proxy_list(proxy_url, site) if proxy_url else _local_list(site)
+            _print_records(records)
+            return 0
+
+        invoice_id = args.invoice_id
+        out_dir = Path(args.out_dir).expanduser() if args.out_dir else DEFAULT_OUT_DIR
+        if proxy_url:
+            pdf_bytes, filename = _proxy_get(proxy_url, site, invoice_id)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            output_path = _next_available_path(out_dir / filename)
+            output_path.write_bytes(pdf_bytes)
+            print(output_path.resolve())
+            return 0
+
+        path = _local_get(site, invoice_id, out_dir=out_dir)
+        print(path)
         return 0
-
-    site = "obsidian"
-    action = args.obsidian_action
-    proxy_url = os.getenv(PROXY_ENV_VAR)
-
-    if action == "list":
-        records = _proxy_list(proxy_url, site) if proxy_url else _local_list(site)
-        _print_records(records)
-        return 0
-
-    invoice_id = args.invoice_id
-    out_dir = Path(args.out_dir).expanduser() if args.out_dir else Path(f"data/{site}")
-    if proxy_url:
-        pdf_bytes, filename = _proxy_get(proxy_url, site, invoice_id)
-        out_dir.mkdir(parents=True, exist_ok=True)
-        output_path = out_dir / filename
-        assert not output_path.exists(), f"File already exists: {output_path}"
-        output_path.write_bytes(pdf_bytes)
-        print(output_path.resolve())
-        return 0
-
-    path = _local_get(site, invoice_id, out_dir=out_dir)
-    print(path)
-    return 0
+    except AssertionError as error:
+        print(f"Error: {error}")
+        return 1
 
 
 if __name__ == "__main__":

@@ -2,11 +2,21 @@
 
 Use Playwright to retrieve invoices from selected suppliers.
 
+Scope: this tool targets supplier/vendor billing sites, not accounting software invoice export flows.
+
 ## Project
 
 - **Repo:** `https://github.com/marcinbogdanski/invoice-retriever`
 - **README:** `https://raw.githubusercontent.com/marcinbogdanski/invoice-retriever/refs/heads/main/README.md`
 - **Skill:** `https://raw.githubusercontent.com/marcinbogdanski/invoice-retriever/refs/heads/main/skills/iret/SKILL.md`
+
+## Operating modes
+
+- `Direct mode` (human): run `iret obsidian ...` on a machine with browser access.
+- `Proxy server` (human, trusted machine): run `iret proxy` where authenticated browser/profile is available.
+- `Proxy client` (AI agent, untrusted machine): run `IRET_PROXY_URL=... iret obsidian ...` only.
+
+Why proxy exists: it creates a security boundary. Browser cookies, password manager access, and authenticated sessions stay on the trusted machine outside of agent reach; the agent only gets list/get results via API.
 
 ## Quick start (fresh clone)
 
@@ -33,7 +43,7 @@ uv run iret obsidian get obsidian_2026-02-07_1487-9029
 uv run iret obsidian get obsidian_2026-02-07_1487-9029 --out-dir ~/Downloads
 ```
 
-`get` saves into `data/obsidian` by default. If the destination file already exists, `iret` fails and does not overwrite it.
+`get` saves into `~/Downloads` by default. If the filename already exists, `iret` saves as `... (1).pdf`, `... (2).pdf`, and so on.
 
 ## Proxy mode
 
