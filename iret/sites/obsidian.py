@@ -54,7 +54,10 @@ def list_invoices() -> list[dict]:
         browser = p.chromium.connect_over_cdp(cdp_url)
         context = browser.contexts[0] if browser.contexts else browser.new_context()
         page = context.new_page()
-        _open_invoice_list(page, invoices)
+        try:
+            _open_invoice_list(page, invoices)
+        finally:
+            page.close()
     return [_to_record(raw) for raw in invoices]
 
 
@@ -70,24 +73,27 @@ def get_invoice(invoice_id: str, out_dir: Path | None = None) -> Path:
         browser = p.chromium.connect_over_cdp(cdp_url)
         context = browser.contexts[0] if browser.contexts else browser.new_context()
         page = context.new_page()
-        _open_invoice_list(page, invoices)
-        records = [_to_record(raw) for raw in invoices]
-        row_index = next(
-            i
-            for i, record in enumerate(records)
-            if record["date"] == target_date and record["receipt_number"] == target_receipt_number
-        )
-        record = records[row_index]
-        page.locator("div.modal-content div.invoice-item").nth(row_index).locator(
-            "button", has_text="View"
-        ).first.click(timeout=TIMEOUT_WAIT_FOR)
-        page.locator("button", has_text="Print invoice").first.wait_for(timeout=TIMEOUT_WAIT_FOR)
-        output_dir = out_dir if out_dir is not None else Path("data/obsidian")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        file_date = record["date"].replace("-", ".")
-        file_amount = f"{record['amount_cents'] / 100:.2f}"
-        file_receipt = record["receipt_number"]
-        output_path = output_dir / f"dynalist - {file_date} - {file_amount} - {file_receipt}.pdf"
-        assert not output_path.exists(), f"File already exists: {output_path}"
-        page.pdf(path=str(output_path), print_background=True)
+        try:
+            _open_invoice_list(page, invoices)
+            records = [_to_record(raw) for raw in invoices]
+            row_index = next(
+                i
+                for i, record in enumerate(records)
+                if record["date"] == target_date and record["receipt_number"] == target_receipt_number
+            )
+            record = records[row_index]
+            page.locator("div.modal-content div.invoice-item").nth(row_index).locator(
+                "button", has_text="View"
+            ).first.click(timeout=TIMEOUT_WAIT_FOR)
+            page.locator("button", has_text="Print invoice").first.wait_for(timeout=TIMEOUT_WAIT_FOR)
+            output_dir = out_dir if out_dir is not None else Path("data/obsidian")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            file_date = record["date"].replace("-", ".")
+            file_amount = f"{record['amount_cents'] / 100:.2f}"
+            file_receipt = record["receipt_number"]
+            output_path = output_dir / f"dynalist - {file_date} - {file_amount} - {file_receipt}.pdf"
+            assert not output_path.exists(), f"File already exists: {output_path}"
+            page.pdf(path=str(output_path), print_background=True)
+        finally:
+            page.close()
     return output_path.resolve()
