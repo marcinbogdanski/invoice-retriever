@@ -27,6 +27,14 @@ def _next_available_path(path: Path) -> Path:
 
 def _print_records(records: list[dict]) -> None:
     for record in records:
+        if record["invoice_id"].startswith("dropbox_"):
+            amount = f"{record['amount_cents'] / 100:.2f}"
+            amount_with_currency = f"{amount} {record['currency']}" if record.get("currency") else amount
+            print(
+                f"{record['invoice_id']} | {record['date']} | "
+                f"{amount_with_currency} | {record['description']}"
+            )
+            continue
         print(
             f"{record['invoice_id']} | {record['date']} | "
             f"amount_cents={record['amount_cents']} | {record['description']}"

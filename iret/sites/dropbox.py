@@ -41,6 +41,10 @@ def _parse_amount_cents(raw: str) -> int:
     return int(Decimal(match.group(1)) * 100)
 
 
+def _parse_currency(raw: str) -> str | None:
+    return "USD" if "US$" in raw else None
+
+
 def _parse_bill_id(invoice_href: str) -> str:
     assert invoice_href, "Dropbox invoice link is missing"
     parsed = urlparse(invoice_href)
@@ -70,6 +74,8 @@ def _collect_records(page) -> list[dict]:
         date = _parse_date(row.locator("[role='cell']").nth(0).inner_text())
         description = row.locator(f"[data-testid='billing-history-table-row-{row_index}-description']").inner_text()
         amount_text = row.locator(f"[data-testid='billing-history-table-row-{row_index}-amount']").inner_text()
+        amount_cents = _parse_amount_cents(amount_text)
+        currency = _parse_currency(amount_text)
 
         row.locator("[data-testid='billing-history-more-menu-trigger-button']").click(
             timeout=TIMEOUT_WAIT_FOR
@@ -85,7 +91,8 @@ def _collect_records(page) -> list[dict]:
                 "invoice_id": f"dropbox_{date}_{bill_id}",
                 "date": date,
                 "description": description,
-                "amount_cents": _parse_amount_cents(amount_text),
+                "amount_cents": amount_cents,
+                "currency": currency,
                 "bill_id": bill_id,
                 "invoice_href": invoice_href,
             }
@@ -129,8 +136,12 @@ def get_invoice(invoice_id: str, out_dir: Path | None = None) -> Path:
             output_dir.mkdir(parents=True, exist_ok=True)
             file_date = record["date"].replace("-", ".")
             file_amount = f"{record['amount_cents'] / 100:.2f}"
+            file_amount_with_currency = (
+                f"{file_amount} {record['currency']}" if record.get("currency") else file_amount
+            )
             output_path = _next_available_path(
-                output_dir / f"dropbox - {file_date} - {file_amount} - {record['bill_id']}.pdf"
+                output_dir
+                / f"dropbox - {file_date} - {file_amount_with_currency} - {record['bill_id']}.pdf"
             )
             page.pdf(path=str(output_path), print_background=True)
         finally:
