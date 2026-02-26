@@ -38,6 +38,10 @@ def _local_list(site: str) -> list[dict]:
         from iret.sites import obsidian
 
         return obsidian.list_invoices()
+    if site == "dropbox":
+        from iret.sites import dropbox
+
+        return dropbox.list_invoices()
     raise AssertionError(f"Unsupported site: {site}")
 
 
@@ -46,6 +50,10 @@ def _local_get(site: str, invoice_id: str, out_dir: Path | None = None) -> Path:
         from iret.sites import obsidian
 
         return obsidian.get_invoice(invoice_id, out_dir=out_dir)
+    if site == "dropbox":
+        from iret.sites import dropbox
+
+        return dropbox.get_invoice(invoice_id, out_dir=out_dir)
     raise AssertionError(f"Unsupported site: {site}")
 
 
@@ -97,13 +105,36 @@ def _start_proxy() -> None:
                 self.wfile.write(body)
                 return
 
+            if path == "/v1/dropbox/list":
+                records = _local_list("dropbox")
+                body = json.dumps(records).encode("utf-8")
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
+            if path.startswith("/v1/dropbox/get/"):
+                invoice_id = unquote(path[len("/v1/dropbox/get/") :])
+                with tempfile.TemporaryDirectory(prefix="iret-proxy-") as tmp:
+                    invoice_path = _local_get("dropbox", invoice_id, out_dir=Path(tmp))
+                    body = invoice_path.read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/pdf")
+                self.send_header("X-Iret-Filename", invoice_path.name)
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+
             self.send_response(404)
             self.end_headers()
 
     server = HTTPServer((PROXY_HOST, PROXY_PORT), Handler)
     print(f"Proxy is running on http://{PROXY_HOST}:{PROXY_PORT}", flush=True)
     print(
-        f"To access proxy run: {PROXY_ENV_VAR}=http://<trusted-host>:{PROXY_PORT} iret obsidian list",
+        f"To access proxy run: {PROXY_ENV_VAR}=http://<trusted-host>:{PROXY_PORT} iret <obsidian|dropbox> list",
         flush=True,
     )
     try:
@@ -123,10 +154,12 @@ def _build_parser() -> argparse.ArgumentParser:
             Examples:
               iret obsidian list
               iret obsidian get obsidian_2026-02-07_1487-9029
+              iret dropbox list
+              iret dropbox get dropbox_2026-02-22_dbfbd66ca735413c91d8e73fbf8f1945
               iret proxy
 
             Delegation:
-              Set {PROXY_ENV_VAR}=http://host:{PROXY_PORT} to delegate obsidian list/get via proxy.
+              Set {PROXY_ENV_VAR}=http://host:{PROXY_PORT} to delegate obsidian/dropbox list/get via proxy.
             """
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -147,6 +180,28 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     get_parser.add_argument("invoice_id", help="Invoice ID, e.g. obsidian_2026-02-07_1487-9029")
     get_parser.add_argument(
+        "--out-dir",
+        default=None,
+        help="Output directory. Default: ~/Downloads",
+    )
+
+    dropbox_parser = commands.add_parser(
+        "dropbox",
+        help="Dropbox invoice commands",
+        description="Commands for Dropbox invoices.",
+    )
+    dropbox_commands = dropbox_parser.add_subparsers(
+        dest="dropbox_action", required=True, metavar="action"
+    )
+    dropbox_commands.add_parser("list", help="List invoices")
+    dropbox_get_parser = dropbox_commands.add_parser(
+        "get", help="Download invoice PDF (auto-suffixes filename on collision)"
+    )
+    dropbox_get_parser.add_argument(
+        "invoice_id",
+        help="Invoice ID, e.g. dropbox_2026-02-22_dbfbd66ca735413c91d8e73fbf8f1945",
+    )
+    dropbox_get_parser.add_argument(
         "--out-dir",
         default=None,
         help="Output directory. Default: ~/Downloads",
@@ -177,8 +232,9 @@ def main() -> int:
             _start_proxy()
             return 0
 
-        site = "obsidian"
-        action = args.obsidian_action
+        assert args.command in ("obsidian", "dropbox"), f"Unsupported command: {args.command}"
+        site = args.command
+        action = getattr(args, f"{site}_action")
         proxy_url = os.getenv(PROXY_ENV_VAR)
 
         if action == "list":

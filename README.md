@@ -12,9 +12,9 @@ Scope: this tool targets supplier/vendor billing sites, not accounting software 
 
 ## Operating modes
 
-- `Direct mode` (human): run `iret obsidian ...` on a machine with browser access.
+- `Direct mode` (human): run `iret <obsidian|dropbox> ...` on a machine with browser access.
 - `Proxy server` (human, trusted machine): run `iret proxy` where authenticated browser/profile is available.
-- `Proxy client` (AI agent, untrusted machine): run `IRET_PROXY_URL=... iret obsidian ...` only.
+- `Proxy client` (AI agent, untrusted machine): run `IRET_PROXY_URL=... iret <obsidian|dropbox> ...` only.
 
 Why proxy exists: it creates a security boundary. Browser cookies, password manager access, and authenticated sessions stay on the trusted machine outside of agent reach; the agent only gets list/get results via API.
 
@@ -41,6 +41,8 @@ Run invoice commands in another terminal:
 uv run iret obsidian list
 uv run iret obsidian get obsidian_2026-02-07_1487-9029
 uv run iret obsidian get obsidian_2026-02-07_1487-9029 --out-dir ~/Downloads
+uv run iret dropbox list
+uv run iret dropbox get dropbox_2026-02-22_dbfbd66ca735413c91d8e73fbf8f1945
 ```
 
 `get` saves into `~/Downloads` by default. If the filename already exists, `iret` saves as `... (1).pdf`, `... (2).pdf`, and so on.
@@ -64,12 +66,16 @@ The proxy binds to `0.0.0.0:8765` and exposes:
 - `GET /healthz`
 - `GET /v1/obsidian/list`
 - `GET /v1/obsidian/get/<invoice_id>`
+- `GET /v1/dropbox/list`
+- `GET /v1/dropbox/get/<invoice_id>`
 
 Run commands on a client machine by delegating through proxy:
 
 ```bash
 IRET_PROXY_URL=http://trusted-host:8765 uv run iret obsidian list
 IRET_PROXY_URL=http://trusted-host:8765 uv run iret obsidian get obsidian_2026-02-07_1487-9029
+IRET_PROXY_URL=http://trusted-host:8765 uv run iret dropbox list
+IRET_PROXY_URL=http://trusted-host:8765 uv run iret dropbox get dropbox_2026-02-22_dbfbd66ca735413c91d8e73fbf8f1945
 ```
 
 ## Install (optional)
